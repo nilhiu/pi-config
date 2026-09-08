@@ -1,0 +1,9 @@
+{
+  "lastChangelogVersion": "0.85.1",
+  "theme": "dark",
+  "defaultProvider": "opencode",
+  "defaultModel": "kimi-k2.6",
+  "packages": [
+    "git:github.com/nilhiu/sanae-mascot-pi"
+  ]
+}

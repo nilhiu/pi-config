@@ -1,0 +1,10 @@
+# secrets & machine-local state — NEVER commit
+auth.json
+sessions/
+trust.json
+models-store.json
+models.json
+bin/
+git/
+npm/
+*.log
