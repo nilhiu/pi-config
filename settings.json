@@ -1,8 +1,8 @@
 {
   "lastChangelogVersion": "0.85.1",
-  "theme": "dark",
+  "theme": "moriya-shrine",
   "defaultProvider": "opencode",
-  "defaultModel": "kimi-k2.6",
+  "defaultModel": "muse-spark-1.3-contributor-free",
   "packages": [
     "git:github.com/nilhiu/sanae-mascot-pi"
   ]
