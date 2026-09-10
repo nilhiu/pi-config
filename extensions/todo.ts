@@ -25,12 +25,16 @@ interface TodoDetails {
 	action: "list" | "add" | "toggle" | "clear";
 	todos: Todo[];
 	nextId: number;
+	added?: Todo[];
 	error?: string;
 }
 
 const TodoParams = Type.Object({
 	action: StringEnum(["list", "add", "toggle", "clear"] as const),
-	text: Type.Optional(Type.String({ description: "Todo text (for add)" })),
+	text: Type.Optional(Type.String({ description: "Todo text (for single add)" })),
+	texts: Type.Optional(
+		Type.Array(Type.String(), { description: "Todo texts (for batch add, alternative to text)" }),
+	),
 	id: Type.Optional(Type.Number({ description: "Todo ID (for toggle)" })),
 });
 
@@ -136,7 +140,8 @@ export default function (pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "todo",
 		label: "Todo",
-		description: "Manage a todo list. Actions: list, add (text), toggle (id), clear",
+		description:
+			"Manage a todo list. Actions: list, add (text for single todo, or texts array for batch add), toggle (id), clear. Prefer a single add call with texts for multiple todos.",
 		parameters: TodoParams,
 
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
@@ -155,17 +160,37 @@ export default function (pi: ExtensionAPI) {
 					};
 
 				case "add": {
-					if (!params.text) {
+					const inputTexts =
+						params.texts && params.texts.length > 0
+							? params.texts
+							: params.text !== undefined
+								? [params.text]
+								: [];
+					const cleaned = inputTexts.map((t) => t.trim()).filter((t) => t.length > 0);
+					if (cleaned.length === 0) {
 						return {
-							content: [{ type: "text", text: "Error: text required for add" }],
-							details: { action: "add", todos: [...todos], nextId, error: "text required" } as TodoDetails,
+							content: [{ type: "text", text: "Error: text or non-empty texts[] required for add" }],
+							details: {
+								action: "add",
+								todos: [...todos],
+								nextId,
+								error: "text or texts required",
+							} as TodoDetails,
 						};
 					}
-					const newTodo: Todo = { id: nextId++, text: params.text, done: false };
-					todos.push(newTodo);
+					const added: Todo[] = cleaned.map((text) => ({ id: nextId++, text, done: false }));
+					todos.push(...added);
 					return {
-						content: [{ type: "text", text: `Added todo #${newTodo.id}: ${newTodo.text}` }],
-						details: { action: "add", todos: [...todos], nextId } as TodoDetails,
+						content: [
+							{
+								type: "text",
+								text:
+									added.length === 1
+										? `Added todo #${added[0].id}: ${added[0].text}`
+										: `Added ${added.length} todos:\n${added.map((t) => `#${t.id}: ${t.text}`).join("\n")}`,
+							},
+						],
+						details: { action: "add", todos: [...todos], nextId, added } as TodoDetails,
 					};
 				}
 
@@ -220,7 +245,9 @@ export default function (pi: ExtensionAPI) {
 
 		renderCall(args, theme, _context) {
 			let text = theme.fg("toolTitle", theme.bold("todo ")) + theme.fg("muted", args.action);
-			if (args.text) text += ` ${theme.fg("dim", `"${args.text}"`)}`;
+			if (Array.isArray(args.texts) && args.texts.length > 0) {
+				text += ` ${theme.fg("success", `+${args.texts.length}`)} ${theme.fg("dim", `"${args.texts[0]}${args.texts.length > 1 ? ` +${args.texts.length - 1} more` : ""}"`)}`;
+			} else if (args.text) text += ` ${theme.fg("dim", `"${args.text}"`)}`;
 			if (args.id !== undefined) text += ` ${theme.fg("accent", `#${args.id}`)}`;
 			return new Text(text, 0, 0);
 		},
@@ -257,15 +284,27 @@ export default function (pi: ExtensionAPI) {
 				}
 
 				case "add": {
-					const added = todoList[todoList.length - 1];
-					return new Text(
-						theme.fg("success", "✓ Added ") +
-							theme.fg("accent", `#${added.id}`) +
-							" " +
-							theme.fg("muted", added.text),
-						0,
-						0,
-					);
+					const added = details.added ?? (todoList.length > 0 ? [todoList[todoList.length - 1]] : []);
+					if (added.length === 0) return new Text(theme.fg("dim", "No todos added"), 0, 0);
+					if (added.length === 1) {
+						return new Text(
+							theme.fg("success", "✓ Added ") +
+								theme.fg("accent", `#${added[0].id}`) +
+								" " +
+								theme.fg("muted", added[0].text),
+							0,
+							0,
+						);
+					}
+					let batchText = theme.fg("success", `✓ Added ${added.length} todos:`);
+					const display = expanded ? added : added.slice(0, 5);
+					for (const t of display) {
+						batchText += `\n${theme.fg("accent", `#${t.id}`)} ${theme.fg("muted", t.text)}`;
+					}
+					if (!expanded && added.length > 5) {
+						batchText += `\n${theme.fg("dim", `... ${added.length - 5} more`)}`;
+					}
+					return new Text(batchText, 0, 0);
 				}
 
 				case "toggle": {
