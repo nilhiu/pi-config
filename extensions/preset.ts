@@ -67,7 +67,41 @@ interface PresetsConfig {
  * Load presets from config files.
  * Project-local presets override global presets with the same name.
  */
-function loadPresets(cwd: string): PresetsConfig {
+const VALID_THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+
+function isValidPreset(p: unknown): p is Preset {
+	if (typeof p !== "object" || p === null) return false;
+	const o = p as Record<string, unknown>;
+	if (o.provider !== undefined && typeof o.provider !== "string") return false;
+	if (o.model !== undefined && typeof o.model !== "string") return false;
+	if (o.thinkingLevel !== undefined && !VALID_THINKING_LEVELS.has(o.thinkingLevel as string)) return false;
+	if (o.tools !== undefined && (!Array.isArray(o.tools) || !o.tools.every((t) => typeof t === "string"))) return false;
+	if (o.instructions !== undefined && typeof o.instructions !== "string") return false;
+	return true;
+}
+
+function parsePresetsFile(path: string): { presets: PresetsConfig; error?: string } {
+	try {
+		const raw = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
+		const presets: PresetsConfig = {};
+		const skipped: string[] = [];
+		for (const [name, p] of Object.entries(raw)) {
+			if (isValidPreset(p)) presets[name] = p;
+		else skipped.push(name);
+		}
+		return { presets, error: skipped.length > 0 ? `Skipped invalid presets: ${skipped.join(", ")}` : undefined };
+	} catch (err) {
+		return { presets: {}, error: `Failed to parse ${path}: ${err instanceof Error ? err.message : String(err)}` };
+	}
+}
+
+/**
+ * Load presets from config files.
+ * Project-local presets override global presets with the same name.
+ * Project presets load only when the project is trusted (instructions can steer the agent).
+ */
+function loadPresets(cwd: string, projectTrusted: boolean): { presets: PresetsConfig; warnings: string[] } {
+	const warnings: string[] = [];
 	const globalPath = join(getAgentDir(), "presets.json");
 	const projectPath = join(cwd, CONFIG_DIR_NAME, "presets.json");
 
@@ -76,26 +110,24 @@ function loadPresets(cwd: string): PresetsConfig {
 
 	// Load global presets
 	if (existsSync(globalPath)) {
-		try {
-			const content = readFileSync(globalPath, "utf-8");
-			globalPresets = JSON.parse(content);
-		} catch (err) {
-			console.error(`Failed to load global presets from ${globalPath}: ${err}`);
-		}
+		const { presets, error } = parsePresetsFile(globalPath);
+		globalPresets = presets;
+		if (error) warnings.push(error);
 	}
 
-	// Load project presets
+	// Load project presets (trusted projects only)
 	if (existsSync(projectPath)) {
-		try {
-			const content = readFileSync(projectPath, "utf-8");
-			projectPresets = JSON.parse(content);
-		} catch (err) {
-			console.error(`Failed to load project presets from ${projectPath}: ${err}`);
+		if (!projectTrusted) {
+			warnings.push(`Skipped project presets at ${projectPath} (untrusted project)`);
+		} else {
+			const { presets, error } = parsePresetsFile(projectPath);
+			projectPresets = presets;
+			if (error) warnings.push(error);
 		}
 	}
 
 	// Merge (project overrides global)
-	return { ...globalPresets, ...projectPresets };
+	return { presets: { ...globalPresets, ...projectPresets }, warnings };
 }
 
 interface OriginalState {
@@ -162,9 +194,10 @@ export default function presetExtension(pi: ExtensionAPI) {
 			}
 		}
 
-		// Store active preset for system prompt injection
+		// Store active preset for system prompt injection (persist once per change, not per turn)
 		activePresetName = name;
 		activePreset = preset;
+		pi.appendEntry("preset-state", { name });
 
 		return true;
 	}
@@ -268,7 +301,7 @@ export default function presetExtension(pi: ExtensionAPI) {
 		if (!result) return;
 
 		if (result === "(none)") {
-			// Clear preset and restore original state
+			// Clear preset and restore original state (leave tools alone if never snapshotted)
 			activePresetName = undefined;
 			activePreset = undefined;
 			if (originalState) {
@@ -277,9 +310,8 @@ export default function presetExtension(pi: ExtensionAPI) {
 				}
 				pi.setThinkingLevel(originalState.thinkingLevel);
 				pi.setActiveTools(originalState.tools);
-			} else {
-				pi.setActiveTools(["read", "bash", "edit", "write"]);
 			}
+			pi.appendEntry("preset-state", { name: "(none)" });
 			ctx.ui.notify("Preset cleared, defaults restored", "info");
 			updateStatus(ctx);
 			return;
@@ -333,9 +365,8 @@ export default function presetExtension(pi: ExtensionAPI) {
 				}
 				pi.setThinkingLevel(originalState.thinkingLevel);
 				pi.setActiveTools(originalState.tools);
-			} else {
-				pi.setActiveTools(["read", "bash", "edit", "write"]);
 			}
+			pi.appendEntry("preset-state", { name: "(none)" });
 			ctx.ui.notify("Preset cleared, defaults restored", "info");
 			updateStatus(ctx);
 			return;
@@ -393,8 +424,10 @@ export default function presetExtension(pi: ExtensionAPI) {
 
 	// Initialize on session start
 	pi.on("session_start", async (_event, ctx) => {
-		// Load presets from config files
-		presets = loadPresets(ctx.cwd);
+		// Load presets from config files (project presets require trust)
+		const loaded = loadPresets(ctx.cwd, ctx.isProjectTrusted());
+		presets = loaded.presets;
+		for (const w of loaded.warnings) ctx.ui.notify(w, "warning");
 
 		// Check for --preset flag
 		const presetFlag = pi.getFlag("preset");
@@ -427,10 +460,5 @@ export default function presetExtension(pi: ExtensionAPI) {
 		updateStatus(ctx);
 	});
 
-	// Persist preset state
-	pi.on("turn_start", async () => {
-		if (activePresetName) {
-			pi.appendEntry("preset-state", { name: activePresetName });
-		}
-	});
 }
+
