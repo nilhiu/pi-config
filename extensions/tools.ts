@@ -53,9 +53,16 @@ export default function toolsExtension(pi: ExtensionAPI) {
 		}
 
 		if (savedTools) {
-			// Restore saved tool selection (filter to only tools that still exist)
+			// Restore saved tool selection (filter to only tools that still exist,
+			// merge in newly registered tools so they aren't silently dropped)
 			const allToolNames = allTools.map((t) => t.name);
-			enabledTools = new Set(savedTools.filter((t: string) => allToolNames.includes(t)));
+			const saved = new Set(savedTools.filter((t: string) => allToolNames.includes(t)));
+			const savedSet = new Set(savedTools);
+			for (const name of pi.getActiveTools()) {
+				if (!savedSet.has(name) && allToolNames.includes(name)) saved.add(name);
+			}
+			enabledTools = saved;
+			if (enabledTools.size === 0) enabledTools = new Set(pi.getActiveTools());
 			applyTools();
 		} else {
 			// No saved state - sync with currently active tools
@@ -99,10 +106,11 @@ export default function toolsExtension(pi: ExtensionAPI) {
 					Math.min(items.length + 2, 15),
 					getSettingsListTheme(),
 					(id, newValue) => {
-						// Update enabled state and apply immediately
+						// Update enabled state and apply immediately (never strand the agent with zero tools)
 						if (newValue === "enabled") {
 							enabledTools.add(id);
 						} else {
+							if (enabledTools.size <= 1 && enabledTools.has(id)) return;
 							enabledTools.delete(id);
 						}
 						applyTools();
