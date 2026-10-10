@@ -4,6 +4,8 @@ sessions/
 trust.json
 models-store.json
 models.json
+mcp-auth.json
+mcp.log.*
 bin/
 git/
 npm/

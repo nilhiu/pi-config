@@ -10,10 +10,12 @@ git-ignored and never committed.
 - `pi-vcc-config.json` - pi-vcc compaction settings
   (`overrideDefaultCompaction: true`, so pi-vcc owns `/compact` and
   auto/overflow compaction instead of Pi's LLM summarizer)
+- `mcp.json` - MCP servers (Context7 docs, remote and anonymous)
 - `extensions/` - local workflow extensions (mostly pi's stock examples):
   git checkpoints, todos, tool toggles, desktop notify, presets
 - `skills/` - model-invoked skills (`plan`: plan-first workflow with optional
-  `scout` recon and a post-approval QA loop)
+  `scout` recon and a post-approval QA loop; `docs`: version-pinned
+  documentation lookup via Context7 and web search)
 - `agents/` - custom subagent definitions for `pi-subagents`
   (`planner.md`, `qa.md`; scout/worker/reviewer come from pi-subagents builtins)
 
@@ -28,6 +30,9 @@ Declared in `settings.json` -> `packages`:
   no-LLM conversation compaction
 - [`pi-subagents`](https://github.com/nicobailon/pi-subagents) - focused
   child agents, orchestration, background runs, saved workflows
+- [`pi-web-access`](https://github.com/nicobailon/pi-web-access) - web search,
+  URL/PDF fetching, and video understanding (also unlocks the `researcher`
+  subagent)
 
 ## Fresh machine setup
 
