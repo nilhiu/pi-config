@@ -11,9 +11,11 @@ git-ignored and never committed.
   (`overrideDefaultCompaction: true`, so pi-vcc owns `/compact` and
   auto/overflow compaction instead of Pi's LLM summarizer)
 - `extensions/` - local workflow extensions (mostly pi's stock examples):
-  git checkpoints, todos, tool toggles, desktop notify, plan-mode, presets
+  git checkpoints, todos, tool toggles, desktop notify, presets
+- `skills/` - model-invoked skills (`plan`: plan-first workflow with optional
+  `scout` recon and a post-approval QA loop)
 - `agents/` - custom subagent definitions for `pi-subagents`
-  (`planner.md`; scout/worker/reviewer come from pi-subagents builtins)
+  (`planner.md`, `qa.md`; scout/worker/reviewer come from pi-subagents builtins)
 
 ## Packages
 
