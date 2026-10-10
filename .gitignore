@@ -7,4 +7,5 @@ models.json
 bin/
 git/
 npm/
+install/
 *.log
