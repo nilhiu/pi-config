@@ -4,6 +4,7 @@
   "defaultProvider": "openrouter",
   "defaultModel": "deepseek/deepseek-v4.1-flash",
   "packages": [
-    "git:github.com/nilhiu/sanae-mascot-pi"
+    "git:github.com/nilhiu/sanae-mascot-pi",
+    "npm:@aliou/pi-guardrails"
   ]
 }
